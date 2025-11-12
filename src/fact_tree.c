@@ -45,7 +45,7 @@ fact_tree_err_t fact_tree_fwrite_node_(fact_tree_node_t* node, FILE* file);
 
 char* fact_tree_dump_graphviz_(fact_tree_t* fact_tree);
 
-int fact_tree_dump_node_graphviz_(FILE* file, fact_tree_node_t* node, int parent_nd_cnt, int rank);
+void fact_tree_dump_node_graphviz_(FILE* file, fact_tree_node_t* node, int rank);
 
 #ifdef _DEBUG
 
@@ -512,7 +512,7 @@ char* fact_tree_dump_graphviz_(fact_tree_t* fact_tree)
     fprintf(file, "digraph {\n rankdir=TB;\n"); 
     fprintf(file, "nodesep=0.9;\nranksep=0.75;\n");
 
-    fact_tree_dump_node_graphviz_(file, fact_tree->root, 0, 1);
+    fact_tree_dump_node_graphviz_(file, fact_tree->root, 1);
 
     fprintf(file, "};");
 
@@ -535,31 +535,25 @@ char* fact_tree_dump_graphviz_(fact_tree_t* fact_tree)
     return img_tmpnam;
 }
 
-int fact_tree_dump_node_graphviz_(FILE* file, fact_tree_node_t* node, int parent_nd_cnt, int rank)
+void fact_tree_dump_node_graphviz_(FILE* file, fact_tree_node_t* node, int rank)
 {
     utils_assert(file);
-    utils_assert(node);
 
-    static int node_cnt = 0;
+    if(!node) return;
 
-    if(rank == 1)
-        node_cnt = 0;
-
-    int node_cnt_left = 0, node_cnt_right = 0;
-    
     if(node->left)
-        node_cnt_left = fact_tree_dump_node_graphviz_(file, node->left, node_cnt + 1, rank + 1); 
+        fact_tree_dump_node_graphviz_(file, node->left, rank + 1); 
     if(node->right) 
-        node_cnt_right = fact_tree_dump_node_graphviz_(file, node->right, node_cnt + 1, rank + 1);
+        fact_tree_dump_node_graphviz_(file, node->right, rank + 1);
 
     fprintf(
         file, 
-        "node_%d["
+        "node_%p["
         "shape=record,"
         "label=\" { parent: %p | addr: %p | title: \' %s \' | { L: %p | R: %p } } \","
         "rank=%d"
         "];\n",
-        node_cnt,
+        node,
         node->parent,
         node,
         node->name.str,
@@ -571,20 +565,18 @@ int fact_tree_dump_node_graphviz_(FILE* file, fact_tree_node_t* node, int parent
     if(node->left)
         fprintf(
             file,
-            "node_%d -> node_%d [label=\"No\"];\n",
-            node_cnt, 
-            node_cnt_left
+            "node_%p -> node_%p [dir=both, label=\"No\"];\n",
+            node, 
+            node->left
         );
 
     if(node->right)
         fprintf(
             file,
-            "node_%d -> node_%d [label=\"Yes\"];\n",
-            node_cnt, 
-            node_cnt_right
+            "node_%p -> node_%p [dir=both, label=\"Yes\"];\n",
+            node, 
+            node->right
         );
-
-    return node_cnt++;
 }
 
 fact_tree_err_t fact_tree_verify_(fact_tree_t* fact_tree)

@@ -77,6 +77,9 @@ int main(int argc, char* argv[])
 
     fact_tree_err_t err = FACT_TREE_ERR_NONE;
     err = fact_tree_ctor(&ftree);
+    if(err != FACT_TREE_ERR_NONE) {
+        UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
+    }
     
     app_data_t appdata = {
         .state = APP_STATE_MENU,
