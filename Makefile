@@ -13,6 +13,7 @@ DEPS := $(patsubst %.o,%.d,$(OBJS))
 # LIBRARIES
 LIBCUTILS_INCLUDE_PATH := ../cutils/include
 LIBCUTILS              := -L../cutils/build/ -lcutils
+LIBNCURSES			   := -lncurses -lpanel -lmenu
 
 # COMPILER CONFIG
 CC := g++
@@ -38,41 +39,17 @@ CPPFLAGS := -MMD -MP -std=c++17 $(addprefix -I,$(INCLUDE_DIRS)) $(addprefix -I,$
 # PROGRAM
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS)
 	@echo -n Linking $@...
-	@$(CC) $(CPPFLAGS) -o $@ $(OBJS) $(LIBCUTILS) 
+	@$(CC) $(CPPFLAGS) -o $@ $(OBJS) $(LIBCUTILS) $(LIBNCURSES)
 	@echo done
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@echo Building $@...
 	@mkdir -p $(BUILD_DIR)
-	@$(CC) $(CPPFLAGS) -c -o $@ $< $(LIBCUTILS)
+	@$(CC) $(CPPFLAGS) -c -o $@ $< $(LIBCUTILS) $(LIBNCURSES)
 
 .PHONY: run
 run: $(BUILD_DIR)/$(EXECUTABLE)
 	./$< --log=log.html --db=db.txt
-
-# TESTS
--include $(TEST_DIR)/test_sources.make
-TEST_EXECS := $(patsubst %.c,$(BUILD_DIR)/%.test,$(TEST_SOURCES))
-
-test: prefix := "\#\#\#\#\#\# [TEST]"
-test: $(TEST_EXECS)
-	@$(foreach														 \
-		exec,														 \
-		$(TEST_EXECS),echo "$(prefix) Running $(notdir $(exec))..."; \
-		hyperfine --export-json bench.json -w 2 -r 10 "taskset -c 3 $(exec) --log=$(patsubst %.test,%.html,$(notdir $(exec)))";   \
-		echo -e "$(prefix) Finished $(notdir $(exec))\n";			 \
-	)
-
-$(BUILD_DIR)/%.test: $(BUILD_DIR)/%.test.o $(OBJS)
-	@echo -n Building test $@...
-	@$(CC) $(CPPFLAGS) -o $@ $^ $(LIBCUTILS)
-	@echo done
-
-$(BUILD_DIR)/%.test.o: $(TEST_DIR)/%.c
-	@echo Building $@...
-	@mkdir -p $(BUILD_DIR)
-	@$(CC) $(CPPFLAGS) -c $< -o $@ $(LIBCUTILS)
-	
 
 .PHONY: clean
 clean:

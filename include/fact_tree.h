@@ -49,7 +49,9 @@ fact_tree_err_t fact_tree_fwrite(fact_tree_t* fact_tree, const char* filename);
 
 fact_tree_err_t fact_tree_fread(fact_tree_t* fact_tree, const char* filename);
 
-void fact_tree_print_definition(const fact_tree_node_t* node);
+const fact_tree_node_t* fact_tree_find_entity(const fact_tree_node_t* node, const char* name);
+
+char* fact_tree_get_definition(const fact_tree_node_t* node);
 
 void fact_tree_dump(fact_tree_t* fact_tree, fact_tree_err_t err, const char* msg, const char* file, int line, const char* funcname);
 
