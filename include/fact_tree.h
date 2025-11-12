@@ -9,32 +9,47 @@ typedef enum fact_tree_err_t
     FACT_TREE_ERR_NONE,
     FACT_TREE_NULLPTR,
     FACT_TREE_ALLOC_FAIL,
-    FACT_TREE_IO_ERR
+    FACT_TREE_IO_ERR,
+    FACT_TREE_SYNTAX_ERR
 } fact_tree_err_t;
 
 typedef struct fact_tree_node_t
 {
-    utils_str_t title;
+    utils_str_t name;
     fact_tree_node_t* left;
     fact_tree_node_t* right;
     fact_tree_node_t* parent;
+
 } fact_tree_node_t;
 
 typedef struct fact_tree_t
 {
     fact_tree_node_t* root;
     size_t size;
+
+    struct {
+        char* ptr;
+        ssize_t len;
+        ssize_t pos;
+    } buf;
+
 } fact_tree_t;
 
 fact_tree_err_t fact_tree_ctor(fact_tree_t* fact_tree);
 
 void fact_tree_dtor(fact_tree_t* fact_tree);
 
-fact_tree_err_t fact_tree_insert(fact_tree_t* fact_tree);
+fact_tree_err_t fact_tree_insert(fact_tree_t* fact_tree, fact_tree_node_t** ret);
+
+fact_tree_node_t* fact_tree_guess(fact_tree_t* fact_tree);
 
 const char* fact_tree_strerr(fact_tree_err_t err);
 
 fact_tree_err_t fact_tree_fwrite(fact_tree_t* fact_tree, const char* filename);
+
+fact_tree_err_t fact_tree_fread(fact_tree_t* fact_tree, const char* filename);
+
+void fact_tree_print_definition(const fact_tree_node_t* node);
 
 void fact_tree_dump(fact_tree_t* fact_tree, fact_tree_err_t err, const char* msg, const char* file, int line, const char* funcname);
 

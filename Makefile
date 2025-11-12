@@ -48,7 +48,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 
 .PHONY: run
 run: $(BUILD_DIR)/$(EXECUTABLE)
-	./$< --log=log.html
+	./$< --log=log.html --db=db.txt
 
 # TESTS
 -include $(TEST_DIR)/test_sources.make
