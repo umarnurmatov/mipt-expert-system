@@ -4,9 +4,21 @@
 
 #include "stringutils.h"
 
+#define FACT_TREE_INIT_LIST \
+    {                       \
+        .root = NULL,       \
+        .size = 0,          \
+        .buf = {            \
+            .ptr = NULL,    \
+            .len = 0,       \
+            .pos = 0        \
+        }                   \
+    };                      
+
 typedef enum fact_tree_err_t
 {
     FACT_TREE_ERR_NONE,
+    FACT_TREE_INVALID_BUFPOS,
     FACT_TREE_NULLPTR,
     FACT_TREE_ALLOC_FAIL,
     FACT_TREE_IO_ERR,
@@ -39,7 +51,7 @@ fact_tree_err_t fact_tree_ctor(fact_tree_t* fact_tree);
 
 void fact_tree_dtor(fact_tree_t* fact_tree);
 
-fact_tree_err_t fact_tree_insert(fact_tree_t* fact_tree, fact_tree_node_t** ret);
+fact_tree_err_t fact_tree_insert(fact_tree_t* fact_tree, fact_tree_node_t* node, fact_tree_node_t** ret);
 
 fact_tree_node_t* fact_tree_guess(fact_tree_t* fact_tree);
 

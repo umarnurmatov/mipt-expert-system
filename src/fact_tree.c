@@ -34,6 +34,7 @@
 
 #else // _DEBUG
 
+#define FACT_TREE_ASSERT_OK_(fact_tree) 
 
 #endif // _DEBUG
 
@@ -42,6 +43,14 @@ fact_tree_err_t fact_tree_allocate_new_node_(fact_tree_node_t** node, utils_str_
 void fact_tree_swap_nodes_(fact_tree_node_t* node_a, fact_tree_node_t* node_b);
 
 fact_tree_err_t fact_tree_fwrite_node_(fact_tree_node_t* node, FILE* file);
+
+fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** node);
+
+fact_tree_err_t fact_tree_scan_node_name_(fact_tree_t* ftree);
+
+int fact_tree_advance_buf_pos_(fact_tree_t* ftree);
+
+void fact_tree_skip_spaces_(fact_tree_t* ftree);
 
 char* fact_tree_dump_graphviz_(fact_tree_t* fact_tree);
 
@@ -81,20 +90,27 @@ void fact_tree_dtor(fact_tree_t* fact_tree)
 
     fact_tree_node_dtor_(fact_tree, fact_tree->root); 
 
+    fact_tree->size = 0;
+    fact_tree->root = NULL;
+
     NFREE(fact_tree->buf.ptr);
 }
 
 void fact_tree_node_dtor_(fact_tree_t* ftree, fact_tree_node_t* node)
 {
-    utils_assert(node);
+    if(!node) return;
 
     if(node->left)
         fact_tree_node_dtor_(ftree, node->left);
     if(node->right)
         fact_tree_node_dtor_(ftree, node->right);
 
-    if(node->name.str >= ftree->buf.ptr + ftree->buf.len 
-            || node->name.str < ftree->buf.ptr)
+    if(ftree->buf.ptr) {
+        if(node->name.str >= ftree->buf.ptr + ftree->buf.len 
+                || node->name.str < ftree->buf.ptr)
+            NFREE(node->name.str);
+    }
+    else
         NFREE(node->name.str);
 
     NFREE(node);
@@ -106,12 +122,12 @@ fact_tree_node_t* fact_tree_guess(fact_tree_t* fact_tree)
 
     fact_tree_node_t* node = fact_tree->root;
 
+    char input = CHAR_DECLINE_;
     while(node->right != NULL) {
-        utils_colored_fprintf(stdout, ANSI_COLOR_BOLD_WHITE, "Entity ..."                  );
-        utils_colored_fprintf(stdout, ANSI_COLOR_CYAN,       "%s",          node->name.str);
+        utils_colored_fprintf(stdout, ANSI_COLOR_BOLD_WHITE, "Is object ... "              );
+        utils_colored_fprintf(stdout, ANSI_COLOR_CYAN,       "%s",           node->name.str);
         utils_colored_fprintf(stdout, ANSI_COLOR_BOLD_WHITE, "? [y/N]: "                   );
 
-        char input = CHAR_DECLINE_;
         scanf("%c", &input);
         clear_stdin_buffer();
 
@@ -120,25 +136,23 @@ fact_tree_node_t* fact_tree_guess(fact_tree_t* fact_tree)
         else
             node = node->left;
     }
-
+    
     return node;
 }
 
-fact_tree_err_t fact_tree_insert(fact_tree_t* fact_tree, fact_tree_node_t** ret)
+fact_tree_err_t fact_tree_insert(fact_tree_t* fact_tree, fact_tree_node_t* node, fact_tree_node_t** ret)
 {
     FACT_TREE_ASSERT_OK_(fact_tree);
     utils_assert(ret);
+    utils_assert(node);
 
     fact_tree_err_t err = FACT_TREE_ERR_NONE;
-
-    fact_tree_node_t* node = fact_tree_guess(fact_tree);
-    utils_assert(node);
 
     utils_str_t diff_s = UTILS_STR_INITLIST;
     utils_str_t entity_s = UTILS_STR_INITLIST;
     enum io_err_t io_err = IO_ERR_NONE;
 
-    utils_colored_fprintf(stdout, ANSI_COLOR_BOLD_WHITE, "Enter entity's name: "); 
+    utils_colored_fprintf(stdout, ANSI_COLOR_BOLD_WHITE, "Enter object's name: "); 
     io_err = input_string_until_correct(&entity_s.str, &entity_s.len);
     io_err == IO_ERR_NONE verified(return FACT_TREE_IO_ERR);
 
@@ -192,9 +206,14 @@ const fact_tree_node_t* fact_tree_find_entity(const fact_tree_node_t* node, cons
     return cur;
 }
 
+#define BUF_INITIAL_SIZE_ 100
+
 char* fact_tree_get_definition(const fact_tree_node_t* node)
 {
-    char* buf = TYPED_CALLOC(100, char);
+    utils_assert(node);
+
+    size_t buf_s = BUF_INITIAL_SIZE_;
+    char* buf = TYPED_CALLOC(buf_s, char);
     buf verified(return NULL);
 
     char* pos = buf;
@@ -204,13 +223,21 @@ char* fact_tree_get_definition(const fact_tree_node_t* node)
     pos += char_transfered;
 
     while(node->parent) {
+
+        if((size_t)(pos - buf) >= buf_s) {
+            char* buf_tmp = TYPED_REALLOC(buf, buf_s * 2, char);
+            buf_tmp verified(return NULL);
+
+            buf = buf_tmp;
+        }
+
         if(node == node->parent->left) {
-            sprintf(pos, " not %s%n", node->parent->name.str, &char_transfered);
+            snprintf(pos, buf_s - (size_t)(pos - buf), " not %s%n", node->parent->name.str, &char_transfered);
             pos += char_transfered;
         }
 
         else if(node == node->parent->right) {
-            sprintf(pos, " %s%n", node->parent->name.str, &char_transfered);
+            snprintf(pos, buf_s - (size_t)(pos - buf), " %s%n", node->parent->name.str, &char_transfered);
             pos += char_transfered;
         }
 
@@ -219,6 +246,8 @@ char* fact_tree_get_definition(const fact_tree_node_t* node)
 
     return buf;
 }
+
+#undef BUF_INITIAL_SIZE_
 
 fact_tree_err_t fact_tree_fwrite(fact_tree_t* fact_tree, const char* filename)
 {
@@ -231,6 +260,8 @@ fact_tree_err_t fact_tree_fwrite(fact_tree_t* fact_tree, const char* filename)
 
     UTILS_LOGD(LOG_CATEGORY_FTREE, "Writing done");
 
+    fclose(file);
+
     return err;
 }
 
@@ -242,10 +273,10 @@ fact_tree_err_t fact_tree_fwrite_node_(fact_tree_node_t* node, FILE* file)
     fact_tree_err_t err = FACT_TREE_ERR_NONE;
     int io_err = 0;
 
-    io_err = fputc('(', file);
+    io_err = fprintf(file, "(");
     io_err >= 0 verified(return FACT_TREE_IO_ERR);
 
-    io_err = fprintf(file, "\"%s\"", node->name.str);
+    io_err = fprintf(file, " \"%s\" ", node->name.str);
     io_err >= 0 verified(return FACT_TREE_IO_ERR);
 
     if(node->left)
@@ -256,19 +287,33 @@ fact_tree_err_t fact_tree_fwrite_node_(fact_tree_node_t* node, FILE* file)
     if(node->right)
         err = fact_tree_fwrite_node_(node->right, file);
     else
-        fprintf(file, NIL);
+        fprintf(file, " " NIL " ");
 
-    io_err = fputc(')', file);
+    io_err = fprintf(file, ")");
     io_err >= 0 verified(return FACT_TREE_IO_ERR);
 
     return err;
+}
+
+int fact_tree_advance_buf_pos_(fact_tree_t* ftree)
+{
+    FACT_TREE_ASSERT_OK_(ftree);
+
+    if(ftree->buf.pos < ftree->buf.len - 1) {
+        ftree->buf.pos++;
+        return 0;
+    }
+    else
+        return 1;
 }
 
 void fact_tree_skip_spaces_(fact_tree_t* ftree)
 {
     FACT_TREE_ASSERT_OK_(ftree);
 
-    while(isspace(ftree->buf.ptr[ftree->buf.pos])) ftree->buf.pos++;
+    while(isspace(ftree->buf.ptr[ftree->buf.pos]))
+        if(!fact_tree_advance_buf_pos_(ftree))
+            break;
 }
 
 fact_tree_err_t fact_tree_scan_node_name_(fact_tree_t* ftree)
@@ -300,8 +345,8 @@ fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** nod
         err = fact_tree_allocate_new_node_(node, name);
         err == FACT_TREE_ERR_NONE verified(return err);
 
-        ftree->buf.pos++;
-        // fact_tree_skip_spaces_(ftree);
+        fact_tree_advance_buf_pos_(ftree);
+        fact_tree_skip_spaces_(ftree);
 
         ssize_t buf_pos_prev = ftree->buf.pos;
         err = fact_tree_scan_node_name_(ftree);
@@ -309,6 +354,8 @@ fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** nod
 
         (*node)->name.str = ftree->buf.ptr + buf_pos_prev + 1;
         (*node)->name.len = (size_t)(ftree->buf.pos - buf_pos_prev);
+
+        fact_tree_skip_spaces_(ftree);
 
         err = fact_tree_fread_node_(ftree, &(*node)->left);
         err == FACT_TREE_ERR_NONE verified(return err);
@@ -318,6 +365,8 @@ fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** nod
             (*node)->left->parent = (*node);
         }
 
+        fact_tree_skip_spaces_(ftree);
+
         err = fact_tree_fread_node_(ftree, &(*node)->right);
         err == FACT_TREE_ERR_NONE verified(return err);
 
@@ -326,11 +375,12 @@ fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** nod
             (*node)->right->parent = (*node);
         }
 
-        ftree->buf.pos++;
-        // fact_tree_skip_spaces_(ftree);
+        fact_tree_advance_buf_pos_(ftree);
+        fact_tree_skip_spaces_(ftree);
     }
     else if(strncmp(ftree->buf.ptr + ftree->buf.pos, NIL, SIZEOF(NIL) - 1) == 0) {
         ftree->buf.pos += SIZEOF(NIL) - 1;
+        fact_tree_skip_spaces_(ftree);
         *node = NULL;
     }
     else {
@@ -344,8 +394,6 @@ fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** nod
         return FACT_TREE_SYNTAX_ERR;
     }
 
-
-
     return FACT_TREE_ERR_NONE;
 }
 
@@ -354,7 +402,7 @@ fact_tree_err_t fact_tree_fread(fact_tree_t* ftree, const char* filename)
     utils_assert(ftree);
     utils_assert(filename);
 
-    // fact_tree_dtor(ftree);
+    fact_tree_dtor(ftree);
 
     FILE* file = open_file(filename, "r");
     file verified(return FACT_TREE_IO_ERR);
@@ -365,13 +413,12 @@ fact_tree_err_t fact_tree_fread(fact_tree_t* ftree, const char* filename)
     ftree->buf.ptr verified(return FACT_TREE_ALLOC_FAIL);
 
     size_t bytes_transferred = fread(ftree->buf.ptr, sizeof(ftree->buf.ptr[0]), fsize, file);
+    fclose(file);
     // TODO check for errors
     ftree->buf.len = (unsigned) bytes_transferred;
     
     fact_tree_err_t err = fact_tree_fread_node_(ftree, &ftree->root);
-
-    UTILS_LOGD(LOG_CATEGORY_FTREE, "%s", fact_tree_strerr(err));
-
+    err == FACT_TREE_ERR_NONE verified(return err);
 
     FACT_TREE_DUMP(ftree, err);
 
@@ -385,6 +432,8 @@ const char* fact_tree_strerr(fact_tree_err_t err)
             return "none";
         case FACT_TREE_NULLPTR:
             return "passed a nullptr";
+        case FACT_TREE_INVALID_BUFPOS:
+            return "buffer position invalid";
         case FACT_TREE_ALLOC_FAIL:
             return "memory allocation failed";
         case FACT_TREE_IO_ERR:
@@ -413,6 +462,7 @@ fact_tree_err_t fact_tree_allocate_new_node_(fact_tree_node_t** node, utils_str_
 
 void fact_tree_swap_nodes_(fact_tree_node_t* node_a, fact_tree_node_t* node_b)
 {
+    // FIXME fix swap
     utils_swap(&node_a->name, &node_b->name, sizeof(node_a->name));
 }
 
@@ -468,7 +518,17 @@ void fact_tree_dump(fact_tree_t* fact_tree, fact_tree_err_t err, const char* msg
     BEGIN {
         if(!fact_tree->buf.ptr) GOTO_END;
 
-        utils_log_fprintf("buf[%ld] = ", fact_tree->buf.len); 
+        utils_log_fprintf("buf.pos = %ld\n", fact_tree->buf.pos); 
+        utils_log_fprintf("buf.len = %ld\n", fact_tree->buf.len); 
+        utils_log_fprintf("buf.ptr[%p] = ", fact_tree->buf.ptr); 
+
+        if(err == FACT_TREE_INVALID_BUFPOS) {
+            for(ssize_t i = 0; i < fact_tree->buf.len; ++i) {
+                utils_log_fprintf("%c", fact_tree->buf.ptr[i]);
+            }    
+            utils_log_fprintf("\n");
+            GOTO_END;
+        }
 
         utils_log_fprintf("<font color=\"#22C710\">"); 
         for(ssize_t i = 0; i < fact_tree->buf.pos; ++i) {
@@ -504,8 +564,10 @@ void fact_tree_dump(fact_tree_t* fact_tree, fact_tree_err_t err, const char* msg
 
 char* fact_tree_dump_graphviz_(fact_tree_t* fact_tree)
 {
+    utils_assert(fact_tree);
 
     FILE* file = open_file(LOG_DIR "/" GRAPHVIZ_FNAME_ ".txt", "w");
+    // FIXME exit
     if(!file)
         exit(EXIT_FAILURE);
 
@@ -524,6 +586,7 @@ char* fact_tree_dump_graphviz_(fact_tree_t* fact_tree)
 
     static char strbuf[GRAPHVIZ_CMD_LEN_]= "";
 
+    // snprintf
     sprintf(
         strbuf, 
         "dot -T svg -o %s.svg " LOG_DIR "/" GRAPHVIZ_FNAME_ ".txt", 
@@ -584,6 +647,8 @@ fact_tree_err_t fact_tree_verify_(fact_tree_t* fact_tree)
     if(!fact_tree)
         return FACT_TREE_NULLPTR;
 
+    if(fact_tree->buf.pos >= fact_tree->buf.len)
+        return FACT_TREE_INVALID_BUFPOS;
     
     return FACT_TREE_ERR_NONE;
 }
