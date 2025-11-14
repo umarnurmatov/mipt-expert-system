@@ -14,6 +14,7 @@ DEPS := $(patsubst %.o,%.d,$(OBJS))
 LIBCUTILS_INCLUDE_PATH := ../cutils/include
 LIBCUTILS              := -L../cutils/build/ -lcutils
 LIBNCURSES			   := -lncurses -lpanel -lmenu
+LIBFESTIVAL			   := -fopenmp -lasound -lestools -lestbase -leststring -lFestival 
 
 # COMPILER CONFIG
 CC := g++
@@ -39,13 +40,13 @@ CPPFLAGS := -MMD -MP -std=c++17 $(addprefix -I,$(INCLUDE_DIRS)) $(addprefix -I,$
 # PROGRAM
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS)
 	@echo -n Linking $@...
-	@$(CC) $(CPPFLAGS) -o $@ $(OBJS) $(LIBCUTILS) $(LIBNCURSES)
+	@$(CC) $(CPPFLAGS) -o $@ $(OBJS) $(LIBCUTILS) $(LIBNCURSES) $(LIBFESTIVAL)
 	@echo done
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@echo Building $@...
 	@mkdir -p $(BUILD_DIR)
-	@$(CC) $(CPPFLAGS) -c -o $@ $< $(LIBCUTILS) $(LIBNCURSES)
+	@$(CC) $(CPPFLAGS) -c -o $@ $< $(LIBCUTILS) $(LIBNCURSES) $(LIBFESTIVAL)
 
 .PHONY: run
 run: $(BUILD_DIR)/$(EXECUTABLE)

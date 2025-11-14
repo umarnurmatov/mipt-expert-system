@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "stringutils.h"
+#include "stack.h"
 
 #define FACT_TREE_INIT_LIST \
     {                       \
@@ -61,9 +62,16 @@ fact_tree_err_t fact_tree_fwrite(fact_tree_t* fact_tree, const char* filename);
 
 fact_tree_err_t fact_tree_fread(fact_tree_t* fact_tree, const char* filename);
 
-const fact_tree_node_t* fact_tree_find_entity(const fact_tree_node_t* node, const char* name);
+const fact_tree_node_t* fact_tree_find_object(const fact_tree_node_t* node, const char* name);
 
-char* fact_tree_get_definition(const fact_tree_node_t* node);
+fact_tree_err_t fact_tree_get_object_path(fact_tree_t* ftree, const fact_tree_node_t* node, stk_t* stk);
+
+fact_tree_err_t fact_tree_print_definition(fact_tree_t* ftree, const fact_tree_node_t* node);
+
+fact_tree_err_t fact_tree_get_difference(fact_tree_t* ftree, const fact_tree_node_t* node_a, const fact_tree_node_t* node_b);
+
+void printf_and_say(const char* fmt, ...)
+    __attribute__ ((format (printf, 1, 2)));
 
 void fact_tree_dump(fact_tree_t* fact_tree, fact_tree_err_t err, const char* msg, const char* file, int line, const char* funcname);
 
