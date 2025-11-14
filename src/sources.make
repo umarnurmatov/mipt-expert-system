@@ -1,1 +1,1 @@
-SOURCES := fact_tree.c main.c
+SOURCES := fact_tree.c stack.c main.c
