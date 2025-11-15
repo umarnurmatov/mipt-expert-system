@@ -47,7 +47,7 @@ static void fact_tree_swap_nodes_(fact_tree_node_t* node_a, fact_tree_node_t* no
 
 static fact_tree_err_t fact_tree_fwrite_node_(fact_tree_node_t* node, FILE* file);
 
-static fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** node);
+static fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** node, const char* fname);
 
 static fact_tree_err_t fact_tree_scan_node_name_(fact_tree_t* ftree);
 
@@ -101,6 +101,8 @@ void fact_tree_dtor(fact_tree_t* fact_tree)
     fact_tree->root = NULL;
 
     NFREE(fact_tree->buf.ptr);
+    fact_tree->buf.pos = 0;
+    fact_tree->buf.len = 0;
 }
 
 void fact_tree_node_dtor_(fact_tree_t* ftree, fact_tree_node_t* node)
@@ -293,7 +295,7 @@ fact_tree_err_t fact_tree_print_difference(fact_tree_t* ftree, const fact_tree_n
     stack_pop(&stk_a, &cur_a); stack_pop(&stk_a, &cur_a);
     stack_pop(&stk_b, &cur_b); stack_pop(&stk_b, &cur_b);
 
-    printf_and_say("%s and %s have in common:", node_a->name.str, node_b->name.str);
+    printf_and_say("%s and %s both:", node_a->name.str, node_b->name.str);
 
     while(cur_a == cur_b) {
         fact_tree_print_node_definition_(cur_a, "");
@@ -302,8 +304,7 @@ fact_tree_err_t fact_tree_print_difference(fact_tree_t* ftree, const fact_tree_n
         if(cur_a == cur_b) printf(",");
     }
 
-    putc('\n', stdout);
-    printf_and_say("%s has unique:", node_a->name.str);
+    printf_and_say(", but %s", node_a->name.str);
 
     for( ;; ) {
         fact_tree_print_node_definition_(cur_a, stk_a.size ? "," : "");
@@ -311,8 +312,7 @@ fact_tree_err_t fact_tree_print_difference(fact_tree_t* ftree, const fact_tree_n
         else break;
     }
 
-    putc('\n', stdout);
-    printf_and_say("%s has unique:", node_b->name.str);
+    printf_and_say(", and %s", node_b->name.str);
 
     for( ;; ) {
         fact_tree_print_node_definition_(cur_b, stk_b.size ? "," : "");
@@ -320,7 +320,7 @@ fact_tree_err_t fact_tree_print_difference(fact_tree_t* ftree, const fact_tree_n
         else break;
     }
     
-    putc('\n', stdout);
+    puts(".\n");
 
     return tree_err;
 }
@@ -389,9 +389,10 @@ void fact_tree_skip_spaces_(fact_tree_t* ftree)
 {
     FACT_TREE_ASSERT_OK_(ftree);
 
-    while(isspace(ftree->buf.ptr[ftree->buf.pos]))
-        if(!fact_tree_advance_buf_pos_(ftree))
+    while(isspace(ftree->buf.ptr[ftree->buf.pos])) {
+        if(fact_tree_advance_buf_pos_(ftree))
             break;
+    }
 }
 
 static int fact_tree_get_height(fact_tree_t* ftree)
@@ -412,12 +413,19 @@ fact_tree_err_t fact_tree_scan_node_name_(fact_tree_t* ftree)
 
     ftree->buf.ptr[ftree->buf.pos - 1] = '\0';
 
-    UTILS_LOGD(LOG_CATEGORY_FTREE, "%d", name_len);
-
     return FACT_TREE_ERR_NONE;
 }
 
-fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** node)
+#define FTREE_LOG_SYNTAX_ERR(fname, ftree, expc) \
+    UTILS_LOGE( \
+        LOG_CATEGORY_FTREE, \
+        "%s:1:%ld: syntax error: unexpected symbol <%c>, expected <" expc ">", \
+        fname, \
+        ftree->buf.pos, \
+        ftree->buf.ptr[ftree->buf.pos] \
+    );
+
+fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** node, const char* fname)
 {
     FACT_TREE_ASSERT_OK_(ftree);
 
@@ -433,6 +441,11 @@ fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** nod
         fact_tree_advance_buf_pos_(ftree);
         fact_tree_skip_spaces_(ftree);
 
+        if(ftree->buf.ptr[ftree->buf.pos] != '"') {
+            FTREE_LOG_SYNTAX_ERR(fname, ftree, "\"");
+            return FACT_TREE_SYNTAX_ERR;
+        }
+
         ssize_t buf_pos_prev = ftree->buf.pos;
         err = fact_tree_scan_node_name_(ftree);
         err == FACT_TREE_ERR_NONE verified(return err);
@@ -442,7 +455,7 @@ fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** nod
 
         fact_tree_skip_spaces_(ftree);
 
-        err = fact_tree_fread_node_(ftree, &(*node)->left);
+        err = fact_tree_fread_node_(ftree, &(*node)->left, fname);
         err == FACT_TREE_ERR_NONE verified(return err);
 
         if((*node)->left) {
@@ -452,7 +465,7 @@ fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** nod
 
         fact_tree_skip_spaces_(ftree);
 
-        err = fact_tree_fread_node_(ftree, &(*node)->right);
+        err = fact_tree_fread_node_(ftree, &(*node)->right, fname);
         err == FACT_TREE_ERR_NONE verified(return err);
 
         if((*node)->right) {
@@ -462,27 +475,34 @@ fact_tree_err_t fact_tree_fread_node_(fact_tree_t* ftree, fact_tree_node_t** nod
 
         ftree->size++;
 
+        if(ftree->buf.ptr[ftree->buf.pos] != ')') {
+            FTREE_LOG_SYNTAX_ERR(fname, ftree, ")");
+            return FACT_TREE_SYNTAX_ERR;
+        }
+
         fact_tree_advance_buf_pos_(ftree);
         fact_tree_skip_spaces_(ftree);
     }
     else if(strncmp(ftree->buf.ptr + ftree->buf.pos, NIL_STR, SIZEOF(NIL_STR) - 1) == 0) {
+
+        if(ftree->buf.ptr[ftree->buf.pos] != 'n') {
+            FTREE_LOG_SYNTAX_ERR(fname, ftree, "n");
+            return FACT_TREE_SYNTAX_ERR;
+        }
+
         ftree->buf.pos += SIZEOF(NIL_STR) - 1;
         fact_tree_skip_spaces_(ftree);
         *node = NULL;
     }
     else {
-        UTILS_LOGE(
-            LOG_CATEGORY_FTREE, 
-            "syntax error: unexpected symbol <%c>"
-            " ASCII code %d", 
-            ftree->buf.ptr[ftree->buf.pos],
-            (int)ftree->buf.ptr[ftree->buf.pos]
-        );
+        FTREE_LOG_SYNTAX_ERR(fname, ftree, "(");
         return FACT_TREE_SYNTAX_ERR;
     }
 
     return FACT_TREE_ERR_NONE;
 }
+
+#undef FTREE_LOG_SYNTAX_ERR
 
 fact_tree_err_t fact_tree_fread(fact_tree_t* ftree, const char* filename)
 {
@@ -504,8 +524,12 @@ fact_tree_err_t fact_tree_fread(fact_tree_t* ftree, const char* filename)
     // TODO check for errors
     ftree->buf.len = (unsigned) bytes_transferred;
     
-    fact_tree_err_t err = fact_tree_fread_node_(ftree, &ftree->root);
-    err == FACT_TREE_ERR_NONE verified(return err);
+    fact_tree_err_t err = fact_tree_fread_node_(ftree, &ftree->root, filename);
+
+    if(err != FACT_TREE_ERR_NONE) {
+        FACT_TREE_DUMP(ftree, err);
+        return err;
+    }
 
     FACT_TREE_DUMP(ftree, err);
 

@@ -14,7 +14,7 @@
 static utils_long_opt_t long_opts[] = 
 {
     { OPT_ARG_REQUIRED, "log", NULL, 0, 0 },
-    { OPT_ARG_REQUIRED, "db" , NULL, 0, 0 },
+    { OPT_ARG_OPTIONAL, "db" , NULL, 0, 0 },
 };
 
 typedef enum app_state_t 
@@ -73,10 +73,6 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    if(!long_opts[1].is_set) {
-        return EXIT_FAILURE;
-    }
-
     utils_init_log_file(long_opts[0].arg, LOG_DIR);
 
     // Festival documentation recommend use such default values
@@ -85,8 +81,8 @@ int main(int argc, char* argv[])
     festival_initialize(festival_load, festival_buffer);
 
     clear_screen();
-    printf_and_say("Welcome to an EXYST expert system!\n");
-    printf_and_say("You will now be redirected to the main menu...\n");
+    // printf_and_say("Welcome to an EXYST expert system!\n");
+    // printf_and_say("You will now be redirected to the main menu...\n");
 
     fact_tree_t ftree = FACT_TREE_INIT_LIST;
 
@@ -94,6 +90,13 @@ int main(int argc, char* argv[])
     err = fact_tree_ctor(&ftree);
     if(err != FACT_TREE_ERR_NONE) {
         UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
+    }
+
+    if(long_opts[1].is_set) {
+        err = fact_tree_fread(&ftree, long_opts[1].arg);
+        if(err != FACT_TREE_ERR_NONE) {
+            UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
+        }
     }
     
     app_data_t appdata = {

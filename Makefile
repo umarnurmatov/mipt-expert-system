@@ -50,7 +50,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 
 .PHONY: run
 run: $(BUILD_DIR)/$(EXECUTABLE)
-	./$< --log=log.html --db=db.txt
+	./$< --log=log.html --db=db4.txt
 
 .PHONY: clean
 clean:
