@@ -84,6 +84,10 @@ int main(int argc, char* argv[])
     const int festival_buffer = 2100000;
     festival_initialize(festival_load, festival_buffer);
 
+    clear_screen();
+    printf_and_say("Welcome to an EXYST expert system!\n");
+    printf_and_say("You will now be redirected to the main menu...\n");
+
     fact_tree_t ftree = FACT_TREE_INIT_LIST;
 
     fact_tree_err_t err = FACT_TREE_ERR_NONE;
@@ -102,6 +106,7 @@ int main(int argc, char* argv[])
         for(size_t i = 0; i < SIZEOF(app); ++i) {
             if(appdata.state == app[i].state) {
                 clear_screen();
+                printf("EXYST© expert system [build v0.1]\n\n");
                 app[i].callback(&appdata);
                 break;
             }
@@ -157,18 +162,16 @@ void app_callback_menu(app_data_t* adata)
 
 void app_callback_load(app_data_t* adata)
 {
-    printf("Enter file name: ");
+    printf_and_say("Enter file name: ");
 
     utils_str_t str = { NULL, 0 };
     input_string_until_correct(&str.str, &str.len);
 
     fact_tree_err_t err = fact_tree_fread(adata->ftree, str.str);
-    if(err != FACT_TREE_ERR_NONE) {
+    if(err != FACT_TREE_ERR_NONE)
         UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
-        adata->exit = 1;
-    }
 
-    printf("Press any key to continue...");
+    printf_and_say("Press any key to continue...");
     scanf("%*c");
     
     adata->state = APP_STATE_MENU;
@@ -178,7 +181,7 @@ void app_callback_load(app_data_t* adata)
 
 void app_callback_save(app_data_t* adata)
 {
-    printf("Enter file name: ");
+    printf_and_say("Enter file name: ");
     utils_str_t str = { NULL, 0 };
     input_string_until_correct(&str.str, &str.len);
 
@@ -187,7 +190,7 @@ void app_callback_save(app_data_t* adata)
         UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
     }
 
-    printf("Press any key to continue...");
+    printf_and_say("Press any key to continue...");
     scanf("%*c");
     
     adata->state = APP_STATE_MENU;
@@ -195,14 +198,11 @@ void app_callback_save(app_data_t* adata)
     NFREE(str.str);
 }
 
-#define STR(x) #x
-#define STR_EXPAND(x) STR(x)
-
 #define CHAR_ACCEPT 'y'
-#define STR_ACCEPT STR_EXPAND(CHAR_ACCEPT)
+#define STR_ACCEPT "y"
 
 #define CHAR_DECLINE 'n'
-#define STR_DECLINE STR_EXPAND(CHAR_DECLINE)
+#define STR_DECLINE "n"
 
 void app_callback_guess(app_data_t* adata)
 {
@@ -210,23 +210,30 @@ void app_callback_guess(app_data_t* adata)
 
     fact_tree_node_t* node = fact_tree_guess(adata->ftree);
 
-    printf("Is it %s? [" STR_ACCEPT "/" STR_DECLINE "]: ", node->name.str);
+    BEGIN {
 
-    char input = CHAR_DECLINE;
-    scanf("%c", &input);
-    clear_stdin_buffer();
+        if(!node) GOTO_END;
 
-    fact_tree_node_t* new_node = NULL;
-    if(input == CHAR_DECLINE) {
-        err = fact_tree_insert(adata->ftree, node, &new_node);
-        if(err != FACT_TREE_ERR_NONE) {
-            UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
+        printf("Is it %s? [" STR_ACCEPT "/" STR_DECLINE "]: ", node->name.str);
+
+
+        char input = CHAR_DECLINE;
+        scanf("%c", &input);
+        clear_stdin_buffer();
+
+        fact_tree_node_t* new_node = NULL;
+        if(input == CHAR_DECLINE) {
+            err = fact_tree_insert(adata->ftree, node, &new_node);
+            if(err != FACT_TREE_ERR_NONE) {
+                UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
+            }
         }
-    }
 
-    FACT_TREE_DUMP(adata->ftree, err);
+        FACT_TREE_DUMP(adata->ftree, err);
 
-    printf("Press any key to continue...");
+    } END;
+
+    printf_and_say("Press any key to continue...");
     scanf("%*c");
 
     adata->state = APP_STATE_MENU;
@@ -235,10 +242,6 @@ void app_callback_guess(app_data_t* adata)
 
 #undef CHAR_ACCEPT
 #undef CHAR_DECLINE
-
-#define ENTER_SUGGEST_STRING "Enter object name: "
-#define OBJECT_NOT_FOUND_STRING "No such object found!"
-#define PRESS_KEY_TO_CONTINUE_STRING "Press any key to continue..."
 
 void app_callback_definition(app_data_t* adata)
 {
@@ -253,7 +256,7 @@ void app_callback_definition(app_data_t* adata)
     BEGIN {
 
         if(!node) {
-            printf_and_say("No such object found");
+            printf_and_say("No such object found\n");
             GOTO_END;
         }
         fact_tree_print_definition(adata->ftree, node);
@@ -275,6 +278,11 @@ void app_callback_difference(app_data_t* adata)
 
     BEGIN {
 
+        if(adata->ftree->size < 1) {
+            printf_and_say("Less than 1 object in tree!\n");
+            GOTO_END;
+        }
+
         printf_and_say("Enter first object name: ");
         input_string_until_correct(&name_a.str, &name_a.len);
 
@@ -282,29 +290,34 @@ void app_callback_difference(app_data_t* adata)
             = fact_tree_find_object(adata->ftree->root, name_a.str);
 
         if(!node_a) {
-            puts("No such object found!");
+            printf_and_say("No such object found!\n");
             GOTO_END;
         }
 
-        printf("Enter second object name: ");
+        printf_and_say("Enter second object name: ");
         input_string_until_correct(&name_b.str, &name_b.len);
 
         const fact_tree_node_t* node_b
             = fact_tree_find_object(adata->ftree->root, name_b.str);
 
         if(!node_b) {
-            puts("No such object found!");
+            printf_and_say("No such object found!\n");
             GOTO_END;
         }
 
-        fact_tree_get_difference(adata->ftree, node_a, node_b);
+        if(node_a == node_b) {
+            printf_and_say("Entered same objects!\n");
+            GOTO_END;
+        }
+
+        fact_tree_print_difference(adata->ftree, node_a, node_b);
 
     } END;
 
     NFREE(name_a.str);
     NFREE(name_b.str);
 
-    printf("Press any key to continue...");
+    printf_and_say("Press any key to continue...");
     scanf("%*c");
 
     adata->state = APP_STATE_MENU;

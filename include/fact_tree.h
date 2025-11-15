@@ -68,7 +68,7 @@ fact_tree_err_t fact_tree_get_object_path(fact_tree_t* ftree, const fact_tree_no
 
 fact_tree_err_t fact_tree_print_definition(fact_tree_t* ftree, const fact_tree_node_t* node);
 
-fact_tree_err_t fact_tree_get_difference(fact_tree_t* ftree, const fact_tree_node_t* node_a, const fact_tree_node_t* node_b);
+fact_tree_err_t fact_tree_print_difference(fact_tree_t* ftree, const fact_tree_node_t* node_a, const fact_tree_node_t* node_b);
 
 void printf_and_say(const char* fmt, ...)
     __attribute__ ((format (printf, 1, 2)));

@@ -126,6 +126,11 @@ void fact_tree_node_dtor_(fact_tree_t* ftree, fact_tree_node_t* node)
 fact_tree_node_t* fact_tree_guess(fact_tree_t* fact_tree)
 {
     FACT_TREE_ASSERT_OK_(fact_tree);
+    
+    if(!fact_tree->root) {
+        UTILS_LOGE(LOG_CATEGORY_FTREE, "tree is not initialized");
+        return NULL;
+    }
 
     fact_tree_node_t* node = fact_tree->root;
 
@@ -231,6 +236,7 @@ fact_tree_err_t fact_tree_get_object_path(fact_tree_t* ftree, const fact_tree_no
 void fact_tree_print_node_definition_(const fact_tree_node_t* node, const char* end)
 {
     utils_assert(node);
+    utils_assert(node->parent);
     utils_assert(end);
 
     if(node == node->parent->left)
@@ -266,7 +272,7 @@ fact_tree_err_t fact_tree_print_definition(fact_tree_t* ftree, const fact_tree_n
     return tree_err;
 }
 
-fact_tree_err_t fact_tree_get_difference(fact_tree_t* ftree, const fact_tree_node_t* node_a, const fact_tree_node_t* node_b)
+fact_tree_err_t fact_tree_print_difference(fact_tree_t* ftree, const fact_tree_node_t* node_a, const fact_tree_node_t* node_b)
 {
     FACT_TREE_ASSERT_OK_(ftree);
     utils_assert(node_a);
@@ -284,31 +290,34 @@ fact_tree_err_t fact_tree_get_difference(fact_tree_t* ftree, const fact_tree_nod
 
     const fact_tree_node_t *cur_a = NULL, *cur_b = NULL;
 
-    stack_pop(&stk_a, &cur_a);
-    stack_pop(&stk_b, &cur_b);
+    stack_pop(&stk_a, &cur_a); stack_pop(&stk_a, &cur_a);
+    stack_pop(&stk_b, &cur_b); stack_pop(&stk_b, &cur_b);
 
     printf_and_say("%s and %s have in common:", node_a->name.str, node_b->name.str);
 
     while(cur_a == cur_b) {
+        fact_tree_print_node_definition_(cur_a, "");
         stack_pop(&stk_a, &cur_a);
         stack_pop(&stk_b, &cur_b);
-        fact_tree_print_node_definition_(cur_a, cur_a == cur_b ? "," : "");
+        if(cur_a == cur_b) printf(",");
     }
 
     putc('\n', stdout);
     printf_and_say("%s has unique:", node_a->name.str);
 
-    while(stk_a.size) {
-        stack_pop(&stk_a, &cur_a);
+    for( ;; ) {
         fact_tree_print_node_definition_(cur_a, stk_a.size ? "," : "");
+        if(stk_a.size) stack_pop(&stk_a, &cur_a);
+        else break;
     }
 
     putc('\n', stdout);
     printf_and_say("%s has unique:", node_b->name.str);
 
-    while(stk_b.size) {
-        stack_pop(&stk_b, &cur_b);
+    for( ;; ) {
         fact_tree_print_node_definition_(cur_b, stk_b.size ? "," : "");
+        if(stk_b.size) stack_pop(&stk_b, &cur_b);
+        else break;
     }
     
     putc('\n', stdout);
@@ -646,7 +655,7 @@ void fact_tree_dump(fact_tree_t* fact_tree, fact_tree_err_t err, const char* msg
     char* img_pref = fact_tree_dump_graphviz_(fact_tree);
 
     utils_log_fprintf(
-        "\n<img src=" IMG_DIR "/%s.svg width=50%%\n", 
+        "\n<img src=" IMG_DIR "/%s.svg width=70%%\n", 
         strrchr(img_pref, '/') + 1
     );
 
@@ -797,7 +806,7 @@ fact_tree_err_t fact_tree_verify_(fact_tree_t* fact_tree)
     if(!fact_tree)
         return FACT_TREE_NULLPTR;
 
-    if(fact_tree->buf.pos >= fact_tree->buf.len)
+    if(fact_tree->buf.pos > fact_tree->buf.len)
         return FACT_TREE_INVALID_BUFPOS;
     
     return FACT_TREE_ERR_NONE;
