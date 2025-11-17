@@ -51,8 +51,7 @@ void app_callback_definition (app_data_t* adata);
 void app_callback_difference (app_data_t* adata);
 void app_callback_exit       (app_data_t* adata);
 
-// FIXMe better name
-static app_t app[] =
+static app_t app_state[] =
 {
     { APP_STATE_MENU,       app_callback_menu       },
     { APP_STATE_LOAD,       app_callback_load       },
@@ -92,11 +91,13 @@ int main(int argc, char* argv[])
         UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
     }
 
-    if(long_opts[1].is_set) {
+    if(long_opts[1].is_set)
         err = fact_tree_fread(&ftree, long_opts[1].arg);
-        if(err != FACT_TREE_ERR_NONE) {
-            UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
-        }
+    else
+        err = fact_tree_fread(&ftree, "db.txt");
+
+    if(err != FACT_TREE_ERR_NONE) {
+        UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
     }
     
     app_data_t appdata = {
@@ -106,11 +107,11 @@ int main(int argc, char* argv[])
     };
 
     while(!appdata.exit) {
-        for(size_t i = 0; i < SIZEOF(app); ++i) {
-            if(appdata.state == app[i].state) {
+        for(size_t i = 0; i < SIZEOF(app_state); ++i) {
+            if(appdata.state == app_state[i].state) {
                 clear_screen();
                 printf("EXYST© expert system [build v0.1]\n\n");
-                app[i].callback(&appdata);
+                app_state[i].callback(&appdata);
                 break;
             }
         }
