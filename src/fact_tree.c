@@ -5,7 +5,10 @@
 #include <ctype.h>
 #include <time.h>
 #include <stdarg.h>
+
 #include <festival/festival.h>
+
+#include "imgui.h"
 
 #include "colorutils.h"
 #include "logutils.h"
@@ -136,18 +139,20 @@ fact_tree_node_t* fact_tree_guess(fact_tree_t* fact_tree)
 
     fact_tree_node_t* node = fact_tree->root;
 
-    char input = CHAR_DECLINE_;
+    // char input = CHAR_DECLINE_;
     while(node->right != NULL) {
-        utils_colored_fprintf(stdout, ANSI_COLOR_BOLD_WHITE, "Is object ... "              );
-        utils_colored_fprintf(stdout, ANSI_COLOR_CYAN,       "%s",           node->name.str);
-        utils_colored_fprintf(stdout, ANSI_COLOR_BOLD_WHITE, "? [y/N]: "                   );
+        // utils_colored_fprintf(stdout, ANSI_COLOR_BOLD_WHITE, "Is object ... "              );
+        // utils_colored_fprintf(stdout, ANSI_COLOR_CYAN,       "%s",           node->name.str);
+        // utils_colored_fprintf(stdout, ANSI_COLOR_BOLD_WHITE, "? [y/N]: "                   );
+        //
+        // scanf("%c", &input);
+        // clear_stdin_buffer();
+        
+        ImGui::Text("Is object %s ...?", node->name.str);
 
-        scanf("%c", &input);
-        clear_stdin_buffer();
-
-        if(input == CHAR_ACCEPT_)
+        if(ImGui::Button("Yes"))
             node = node->right;
-        else
+        else if(ImGui::Button("No"))
             node = node->left;
     }
     

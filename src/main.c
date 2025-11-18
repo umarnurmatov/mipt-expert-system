@@ -1,5 +1,14 @@
+#include <SDL3/SDL_init.h>
 #include <festival/festival.h>
 #include <speech_tools/EST_String.h>
+
+#include "imgui.h"
+#include "imgui_impl_sdl3.h"
+#include "imgui_impl_sdlrenderer3.h"
+
+#define SDL_MAIN_USE_CALLBACKS 1
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
 
 #include "fact_tree.h"
 #include "optutils.h"
@@ -62,14 +71,68 @@ static app_t app_state[] =
     { APP_STATE_EXIT,       app_callback_exit       }
 };
 
-void clear_screen();
+static SDL_Window *window = NULL;
+static SDL_Renderer *renderer = NULL;
+static ImGuiIO* io = NULL;
+static fact_tree_t ftree = FACT_TREE_INIT_LIST;
+static app_data_t appdata = {
+    .state = APP_STATE_MENU,
+    .ftree = &ftree
+};
 
-int main(int argc, char* argv[])
+SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
+    {
+        SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    // Create window with SDL_Renderer graphics context
+    float main_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
+    SDL_WindowFlags window_flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    window = SDL_CreateWindow("Dear ImGui SDL3+SDL_Renderer example", (int)(1280 * main_scale), (int)(800 * main_scale), window_flags);
+
+    if (window == nullptr)
+    {
+        SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    renderer = SDL_CreateRenderer(window, nullptr);
+    SDL_SetRenderVSync(renderer, 1);
+    if (renderer == nullptr)
+    {
+        SDL_Log("Error: SDL_CreateRenderer(): %s\n", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+    SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    SDL_ShowWindow(window);
+
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    io = &ImGui::GetIO(); (void)io;
+    io->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+    //ImGui::StyleColorsLight();
+
+    // Setup scaling
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(main_scale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
+    style.FontScaleDpi = main_scale;        // Set initial font scale. (using io.ConfigDpiScaleFonts=true makes this unnecessary. We leave both here for documentation purpose)
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
+    ImGui_ImplSDLRenderer3_Init(renderer);
+
     utils_long_opt_get(argc, argv, long_opts, SIZEOF(long_opts));
 
     if(!long_opts[0].is_set) {
-        return EXIT_FAILURE;
+        return SDL_APP_FAILURE;
     }
 
     utils_init_log_file(long_opts[0].arg, LOG_DIR);
@@ -79,11 +142,6 @@ int main(int argc, char* argv[])
     const int festival_buffer = 2100000;
     festival_initialize(festival_load, festival_buffer);
 
-    clear_screen();
-    // printf_and_say("Welcome to an EXYST expert system!\n");
-    // printf_and_say("You will now be redirected to the main menu...\n");
-
-    fact_tree_t ftree = FACT_TREE_INIT_LIST;
 
     fact_tree_err_t err = FACT_TREE_ERR_NONE;
     err = fact_tree_ctor(&ftree);
@@ -99,69 +157,76 @@ int main(int argc, char* argv[])
     if(err != FACT_TREE_ERR_NONE) {
         UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
     }
-    
-    app_data_t appdata = {
-        .state = APP_STATE_MENU,
-        .ftree = &ftree,
-        .exit = 0
-    };
 
-    while(!appdata.exit) {
-        for(size_t i = 0; i < SIZEOF(app_state); ++i) {
-            if(appdata.state == app_state[i].state) {
-                clear_screen();
-                printf("EXYST© expert system [build v0.1]\n\n");
-                app_state[i].callback(&appdata);
-                break;
-            }
+
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
+{
+    ImGui_ImplSDL3_ProcessEvent(event);
+
+    if (event->type == SDL_EVENT_QUIT)
+        return SDL_APP_SUCCESS;
+
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppIterate(void *appstate) 
+{
+    // Start the Dear ImGui frame
+    ImGui_ImplSDLRenderer3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+
+
+    for(size_t i = 0; i < SIZEOF(app_state); ++i) {
+        if(appdata.state == app_state[i].state) {
+            app_state[i].callback(&appdata);
+            break;
         }
     }
 
-    fact_tree_dtor(&ftree);
+    // Rendering
+    ImGui::Render();
+    SDL_SetRenderScale(renderer, io->DisplayFramebufferScale.x, io->DisplayFramebufferScale.y);
+    SDL_RenderClear(renderer);
+    ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+    SDL_RenderPresent(renderer);
 
+    return SDL_APP_CONTINUE;
+}
+
+void SDL_AppQuit(void *appstate, SDL_AppResult result)
+{
+    fact_tree_dtor(&ftree);
     utils_end_log();
 
-    return EXIT_SUCCESS;
+    ImGui_ImplSDLRenderer3_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
+    ImGui::DestroyContext();
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 }
 
 void app_callback_menu(app_data_t* adata)
 {
-    printf("Modes\n"
-           "1. Guess\n"
-           "2. Load from file\n"
-           "3. Save to file\n"
-           "4. Get defition\n"
-           "5. Get difference\n"
-           "6. Exit\n"
-           "Enter mode number: "
-    );
+    ImGui::Begin("Main menu");
 
-    int input = 0;
-    scanf("%d", &input);
-    clear_stdin_buffer();
+    if(ImGui::Button("Guess"))
+        adata->state = APP_STATE_GUESS;
+    else if(ImGui::Button("Load database"))
+        adata->state = APP_STATE_LOAD;
+    else if(ImGui::Button("Save database"))
+        adata->state = APP_STATE_SAVE;
+    else if(ImGui::Button("Get definition"))
+        adata->state = APP_STATE_DEFINITION;
+    else if(ImGui::Button("Get difference"))
+        adata->state = APP_STATE_DIFFERENCE;
     
-    switch(input) {
-        case 1:
-            adata->state = APP_STATE_GUESS;
-            break;
-        case 2:
-            adata->state = APP_STATE_LOAD;
-            break;
-        case 3:
-            adata->state = APP_STATE_SAVE;
-            break;
-        case 4:
-            adata->state = APP_STATE_DEFINITION;
-            break;
-        case 5:
-            adata->state = APP_STATE_DIFFERENCE;
-            break;
-        case 6:
-            adata->state = APP_STATE_EXIT;
-            break;
-        default:
-            break;
-    }
+    ImGui::End();
 }
 
 void app_callback_load(app_data_t* adata)
@@ -212,21 +277,20 @@ void app_callback_guess(app_data_t* adata)
 {
     fact_tree_err_t err = FACT_TREE_ERR_NONE;
 
+    ImGui::Begin("Guess");
+
     fact_tree_node_t* node = fact_tree_guess(adata->ftree);
 
     BEGIN {
 
         if(!node) GOTO_END;
 
-        printf("Is it %s? [" STR_ACCEPT "/" STR_DECLINE "]: ", node->name.str);
-
-
-        char input = CHAR_DECLINE;
-        scanf("%c", &input);
-        clear_stdin_buffer();
+        ImGui::Text("Is it %s?", node->name.str);
+        
+        if(ImGui::Button("Yes")) GOTO_END;
 
         fact_tree_node_t* new_node = NULL;
-        if(input == CHAR_DECLINE) {
+        if(ImGui::Button("No")) {
             err = fact_tree_insert(adata->ftree, node, &new_node);
             if(err != FACT_TREE_ERR_NONE) {
                 UTILS_LOGE(LOG_CATEGORY_APP, "%s", fact_tree_strerr(err));
@@ -237,10 +301,9 @@ void app_callback_guess(app_data_t* adata)
 
     } END;
 
-    printf_and_say("Press any key to continue...");
-    scanf("%*c");
-
     adata->state = APP_STATE_MENU;
+
+    ImGui::End();
 
 }
 
@@ -330,9 +393,4 @@ void app_callback_difference(app_data_t* adata)
 void app_callback_exit(app_data_t* adata)
 {
     adata->exit = 1;
-}
-
-void clear_screen()
-{
-    printf("\033[2J\033[H");
 }
